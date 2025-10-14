@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetSpectre - Escáner de Redes Ético</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        /* Estilos personalizados */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #121212; 
+            color: #E0E0E0; 
+        }
+        .scan-button { transition: all 0.2s; }
+        .scan-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(27, 230, 168, 0.4);
+        }
+        .status-open {
+            background-color: #1a4538; 
+            color: #1be6a8; 
+        }
+        .vuln-high {
+            background-color: #7f1d1d; /* red-900 */
+            color: #fca5a5; /* red-300 */
+        }
+        .vuln-low {
+            background-color: #1e3a8a; /* blue-900 */
+            color: #93c5fd; /* blue-300 */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="min-h-screen flex flex-col items-center justify-center p-4">
+
+        <!-- Panel Principal del Escáner -->
+        <div class="bg-gray-800 p-8 md:p-10 rounded-xl shadow-2xl w-full max-w-3xl border border-gray-700">
+            <h1 class="text-4xl font-extrabold text-white mb-2 text-center">
+                Net<span class="text-teal-400">Spectre</span>
+            </h1>
+            <p class="text-center text-gray-400 mb-8">
+                Herramienta de análisis de puertos, OS y vulnerabilidades (Impulsado por Nmap).
+            </p>
+
+            <!-- Formulario de Entrada -->
+            <div class="space-y-4">
+                <input id="ipInput" type="text" placeholder="IP o Host (Ej: 127.0.0.1)" value="127.0.0.1"
+                       class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-400 text-white placeholder-gray-400">
+                
+                <input id="portsInput" type="text" placeholder="Rango de Puertos (Ej: 1-100 o 22,80,443)" value="1-100"
+                       class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-400 text-white placeholder-gray-400">
+                
+                <!-- Botones de Escaneo -->
+                <div class="grid grid-cols-3 gap-3">
+                    <button id="scanButton" onclick="startScan('ports')"
+                            class="scan-button p-3 rounded-lg font-bold text-lg bg-teal-600 text-gray-900 hover:bg-teal-500 flex items-center justify-center col-span-1">
+                        ESCANEO DE PUERTOS
+                    </button>
+                    <button id="osButton" onclick="startScan('os')"
+                            class="scan-button p-3 rounded-lg font-bold text-lg bg-blue-600 text-white hover:bg-blue-500 flex items-center justify-center col-span-1">
+                        DETECCIÓN OS
+                    </button>
+                     <button id="vulnButton" onclick="startScan('vuln')"
+                            class="scan-button p-3 rounded-lg font-bold text-lg bg-red-600 text-white hover:bg-red-500 flex items-center justify-center col-span-1">
+                        ESCANEO VULN
+                    </button>
+                </div>
+
+                <!-- Spinner de carga global (oculto por defecto) -->
+                <div id="loadingSpinner" class="hidden flex items-center justify-center p-2 bg-gray-700 rounded-lg text-white">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="loadingText">Iniciando escaneo...</span>
+                </div>
+            </div>
+
+            <!-- Contenedor de Resultados -->
+            <div id="resultsContainer" class="mt-8 pt-6 border-t border-gray-700 hidden">
+                <h2 class="text-2xl font-semibold mb-4 text-white">Resultados Nmap para <span id="targetIpDisplay" class="text-teal-400"></span></h2>
+                
+                <!-- Mensaje de estado/error -->
+                <div id="statusMessage" class="p-3 rounded-lg mb-4 text-sm font-medium"></div>
+
+                <!-- Secciones de Resultados -->
+                <div class="space-y-6">
+                    <!-- Sección de Puertos y Servicios -->
+                    <div id="portsSection" class="hidden">
+                        <h3 class="text-xl font-bold mb-2 border-b border-gray-700 pb-1 text-teal-400">Puertos Abiertos y Servicios</h3>
+                        <div id="portsList" class="max-h-64 overflow-y-auto space-y-3 p-2 bg-gray-900 rounded-lg border border-gray-700"></div>
+                    </div>
+
+                    <!-- Sección de Detección OS -->
+                    <div id="osSection" class="hidden p-4 bg-gray-900 rounded-lg border border-gray-700">
+                        <h3 class="text-xl font-bold mb-2 border-b border-gray-700 pb-1 text-blue-400">Sistema Operativo Detectado</h3>
+                        <div class="text-lg font-mono text-white" id="osNameDisplay"></div>
+                        <div class="text-sm text-gray-400" id="osAccuracyDisplay"></div>
+                    </div>
+
+                     <!-- Sección de Vulnerabilidades -->
+                    <div id="vulnSection" class="hidden">
+                        <h3 class="text-xl font-bold mb-2 border-b border-gray-700 pb-1 text-red-400">Vulnerabilidades Comunes (NSE)</h3>
+                        <div id="vulnList" class="max-h-64 overflow-y-auto space-y-3 p-2 bg-gray-900 rounded-lg border border-gray-700">
+                            <p class="text-gray-500 text-sm italic">No se encontraron vulnerabilidades conocidas.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pie de página con tu información de portafolio -->
+        <p class="mt-6 text-sm text-gray-500">
+            Desarrollado por Carlos Sandoval R. - Herramienta de Ciberseguridad
+        </p>
+
+    </div>
+
+    <script>
+        // Mapeo de botones
+        const BUTTONS = {
+            ports: document.getElementById('scanButton'),
+            os: document.getElementById('osButton'),
+            vuln: document.getElementById('vulnButton')
+        };
+        const URLS = {
+            ports: '/scan',
+            os: '/os_detect',
+            vuln: '/vuln_scan'
+        };
+        const LOADING_TEXTS = {
+            ports: 'Escaneando Puertos...',
+            os: 'Detectando OS (Requiere Root)...',
+            vuln: 'Buscando Vulnerabilidades (Lento)...'
+        };
+
+        function resetUI() {
+            // Ocultar todas las secciones de resultados
+            document.getElementById('portsSection').classList.add('hidden');
+            document.getElementById('osSection').classList.add('hidden');
+            document.getElementById('vulnSection').classList.add('hidden');
+            document.getElementById('resultsContainer').classList.add('hidden');
+            document.getElementById('statusMessage').classList.add('hidden');
+            document.getElementById('statusMessage').innerHTML = '';
+        }
+
+        function toggleLoading(scanType, isLoading) {
+            const spinner = document.getElementById('loadingSpinner');
+            const button = BUTTONS[scanType];
+            const loadingText = document.getElementById('loadingText');
+
+            if (isLoading) {
+                Object.values(BUTTONS).forEach(btn => btn.disabled = true);
+                spinner.classList.remove('hidden');
+                loadingText.textContent = LOADING_TEXTS[scanType];
+                button.textContent = 'ESCANENO...';
+            } else {
+                Object.values(BUTTONS).forEach(btn => btn.disabled = false);
+                spinner.classList.add('hidden');
+                button.textContent = button.textContent.replace('ESCANENO...', BUTTONS[scanType].initialText);
+            }
+        }
+
+        async function startScan(scanType) {
+            resetUI();
+            const ipInput = document.getElementById('ipInput');
+            const portsInput = document.getElementById('portsInput');
+            const targetIpDisplay = document.getElementById('targetIpDisplay');
+
+            const targetIp = ipInput.value.trim();
+            const portRange = portsInput.value.trim() || '1-1024';
+
+            if (!targetIp) {
+                alert('Por favor, ingresa una IP objetivo.');
+                return;
+            }
+
+            toggleLoading(scanType, true);
+
+            try {
+                const response = await fetch(URLS[scanType], {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ip: targetIp, ports: portRange })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Error desconocido en el servidor.');
+                }
+
+                // Mostrar Contenedor Principal
+                document.getElementById('resultsContainer').classList.remove('hidden');
+                targetIpDisplay.textContent = data.ip;
+
+                // --- MANEJO DE RESULTADOS ESPECÍFICOS ---
+
+                if (scanType === 'ports') {
+                    handlePortsResults(data);
+                } else if (scanType === 'os') {
+                    handleOsResults(data);
+                } else if (scanType === 'vuln') {
+                    handleVulnResults(data);
+                }
+
+            } catch (error) {
+                // Manejo de errores (conexión o API)
+                const statusMessage = document.getElementById('statusMessage');
+                statusMessage.classList.remove('hidden');
+                statusMessage.className = 'p-3 rounded-lg mb-4 text-sm font-medium bg-red-800 text-red-300';
+                statusMessage.textContent = `Error: ${error.message}`;
+            } finally {
+                toggleLoading(scanType, false);
+            }
+        }
+
+        function handlePortsResults(data) {
+            const portsList = document.getElementById('portsList');
+            const statusMessage = document.getElementById('statusMessage');
+            portsList.innerHTML = ''; 
+
+            document.getElementById('portsSection').classList.remove('hidden');
+
+            if (data.ports.length === 0) {
+                portsList.innerHTML = '<p class="text-gray-500 text-center py-4">No se encontraron puertos abiertos en el rango especificado.</p>';
+                statusMessage.className = 'p-3 rounded-lg mb-4 text-sm font-medium bg-blue-800 text-blue-300';
+                statusMessage.textContent = `Escaneo de Puertos completado.`;
+            } else {
+                statusMessage.className = 'p-3 rounded-lg mb-4 text-sm font-medium bg-teal-800 text-teal-300';
+                statusMessage.textContent = `¡Éxito! Nmap encontró ${data.ports.length} puertos abiertos.`;
+
+                data.ports.forEach(port => {
+                    const portElement = document.createElement('div');
+                    portElement.className = 'flex flex-col p-3 rounded-lg status-open';
+                    
+                    const header = document.createElement('div');
+                    header.className = 'flex justify-between items-center';
+                    header.innerHTML = `
+                        <div class="font-mono text-lg font-bold">Puerto ${port.port}</div>
+                        <div class="text-sm font-medium text-teal-300">${port.name.toUpperCase()}</div>
+                    `;
+                    
+                    const details = document.createElement('div');
+                    details.className = 'text-xs mt-1 text-gray-300';
+                    details.textContent = port.full_service;
+
+                    portElement.appendChild(header);
+                    portElement.appendChild(details);
+                    portsList.appendChild(portElement);
+                });
+            }
+            statusMessage.classList.remove('hidden');
+        }
+
+        function handleOsResults(data) {
+            const osSection = document.getElementById('osSection');
+            const osNameDisplay = document.getElementById('osNameDisplay');
+            const osAccuracyDisplay = document.getElementById('osAccuracyDisplay');
+            const statusMessage = document.getElementById('statusMessage');
+
+            osSection.classList.remove('hidden');
+            
+            if (data.os && data.os.name !== 'Desconocido') {
+                osNameDisplay.textContent = data.os.name;
+                osAccuracyDisplay.textContent = `Precisión de Nmap: ${data.os.accuracy}%`;
+                statusMessage.className = 'p-3 rounded-lg mb-4 text-sm font-medium bg-blue-800 text-blue-300';
+                statusMessage.textContent = `Detección de OS exitosa.`;
+            } else {
+                osNameDisplay.textContent = 'No detectado';
+                osAccuracyDisplay.textContent = 'Precisión de Nmap: 0%';
+                statusMessage.className = 'p-3 rounded-lg mb-4 text-sm font-medium bg-yellow-800 text-yellow-300';
+                statusMessage.textContent = `OS no detectado. Puede estar bloqueado por un firewall.`;
+            }
+             statusMessage.classList.remove('hidden');
+        }
+
+        function handleVulnResults(data) {
+            const vulnList = document.getElementById('vulnList');
+            const statusMessage = document.getElementById('statusMessage');
+            vulnList.innerHTML = '';
+
+            document.getElementById('vulnSection').classList.remove('hidden');
+
+            if (data.vulnerabilities.length === 0) {
+                vulnList.innerHTML = '<p class="text-gray-500 text-center py-4">No se encontraron vulnerabilidades comunes (Básicas).</p>';
+                statusMessage.className = 'p-3 rounded-lg mb-4 text-sm font-medium bg-teal-800 text-teal-300';
+                statusMessage.textContent = `Escaneo de vulnerabilidades finalizado.`;
+            } else {
+                statusMessage.className = 'p-3 rounded-lg mb-4 text-sm font-medium bg-red-800 text-red-300';
+                statusMessage.textContent = `¡Advertencia! Se encontraron ${data.vulnerabilities.length} resultados de vulnerabilidades.`;
+
+                data.vulnerabilities.forEach(vuln => {
+                    const vulnElement = document.createElement('div');
+                    vulnElement.className = 'p-3 rounded-lg vuln-high border border-red-400';
+                    
+                    const header = document.createElement('div');
+                    header.className = 'flex justify-between items-center mb-1';
+                    header.innerHTML = `
+                        <div class="font-mono text-base font-bold text-red-100">PUERTO ${vuln.port} (${vuln.service.toUpperCase()})</div>
+                        <div class="text-sm font-bold text-red-200">ALERTA</div>
+                    `;
+                    
+                    const details = document.createElement('pre');
+                    details.className = 'text-xs whitespace-pre-wrap mt-2 font-mono text-red-100 bg-red-900 p-2 rounded';
+                    // Reemplaza los saltos de línea para mejor visualización
+                    details.textContent = vuln.output.replace(/\\n/g, '\n').trim(); 
+
+                    vulnElement.appendChild(header);
+                    vulnElement.appendChild(details);
+                    vulnList.appendChild(vulnElement);
+                });
+            }
+            statusMessage.classList.remove('hidden');
+        }
+
+        // Inicializar texto inicial de los botones
+        Object.values(BUTTONS).forEach(btn => {
+            btn.initialText = btn.textContent;
+        });
+
+    </script>
+</body>
+</html>
