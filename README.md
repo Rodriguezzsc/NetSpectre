@@ -69,5 +69,5 @@ Rango de Puertos: Especifica el rango (ej. 1-1024 o 80,443).
 
 Selecciona el Escaneo: Haz clic en ESCANEO DE PUERTOS, DETECCIÓN OS o ESCANEO VULN.
 
-Desarrollado por Carlos Sandoval Rodriguez - Portafolio-
+Desarrollado por Carlos Sandoval Rodriguez - Portafolio-https://github.com/Rodriguezzsc/NetSpectre
 
